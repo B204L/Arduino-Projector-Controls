@@ -1,0 +1,231 @@
+//+Arduino firmware for A/V in 2255 v 1.3
+//+added stateful programming, prevent the program from doing something in the wrong on/off state
+//+added on/off timers, on/off buttons will blink while the projector is turning on/off
+//all buttons are disabled while projector is in either of these two states
+
+//+Arduino firmware for A/V in 2255 v 1.4
+//+added video mute function
+//+fixed arbitrary pin layout for LED pins (switched off led and on led so they're now in sequence)
+//+added lots of comments
+
+//POWER ON
+int buttonInput = 2;    //button read on digital pin 2
+int buttonLight = 13;   //led read on digital pin 13
+int buttonState = 0;    //is the button open or closed?
+boolean buttonled = false;  //stateful switch to track if LED is on or off
+
+//POWER OFF
+int buttonInput1 = 3;   //button read on digital pin 3
+int buttonLight1 = 12;  //led read on digital pin 12
+int buttonState1 = 0;   
+boolean buttonled1 = false;
+
+//HDMI
+int buttonInput2 = 4;   //button read on digital pin 4
+int buttonLight2 = 11;  //led read on digital pin 11
+int buttonState2 = 0;
+boolean buttonled2 = false;
+
+//VGA1
+int buttonInput3 = 5;   //button read on digital pin 5
+int buttonLight3 = 10;  //led read on digital pin 10
+int buttonState3 = 0;
+boolean buttonled3 = false;
+
+//VGA2
+int buttonInput4 = 6;   //button read on digital pin 6
+int buttonLight4 = 9;   //led read on digital pin 9
+int buttonState4 = 0;
+boolean buttonled4 = false;
+
+//VIDEO MUTE
+int buttonInput5 = 7;  //button read on digital pin 7
+int buttonLight5 = 8;  //led read on digital pin 8
+int buttonState5 = 0;
+boolean buttonled5 = false;
+
+boolean projectorState = false;   //switches for stateful programming, one of these may be arbitrary but it works
+boolean projectorOn = false;      //possibly refine code in the future and remove one of these
+boolean videomute = false;
+void setup() 
+{
+
+//things to run once
+//sets pinmodes and button defaults
+
+Serial.begin(19200);    //initialize UART comms at 19200
+
+//POWER ON
+pinMode(buttonLight, OUTPUT);     //define LED as output
+pinMode(buttonInput, INPUT);      //define button press as input
+digitalWrite(buttonInput, HIGH);  //set buttonInput to HIGH by default, buttons are wired up as normally closed so the logic is backwards
+
+//POWER OFF
+pinMode(buttonLight1, OUTPUT);    
+pinMode(buttonInput1, INPUT);     
+digitalWrite(buttonInput1, HIGH); 
+
+//HDMI
+pinMode(buttonLight2, OUTPUT);
+pinMode(buttonInput2, INPUT);
+digitalWrite(buttonInput2, HIGH);
+
+//VGA1
+pinMode(buttonLight3, OUTPUT);
+pinMode(buttonInput3, INPUT);
+digitalWrite(buttonInput3, HIGH);
+
+//VGA2
+pinMode(buttonLight4, OUTPUT);
+pinMode(buttonInput4, INPUT);
+digitalWrite(buttonInput4, HIGH);
+
+//MUTE
+pinMode(buttonLight5, OUTPUT);
+pinMode(buttonInput5, INPUT);
+digitalWrite(buttonInput5, HIGH);
+}
+////////////////////////////////////////////////////////////
+
+void loop() 
+{
+int offBlink = 0;   //integer to hold value of blinks during 'turning off' state
+int onBlink = 0;    //integer to hold value of blinks during 'turning on' state
+projectorState = false;   //default projector state is off
+
+//POWER ON
+//When the ON button is pressed, the light will come on momentarily before sending the ON code to the projector. It takes roughly 45 seconds for the projector
+//to turn on, while it's in this "starting" state the ON button will run a blink loop for 45 seconds that disables all other inputs forcing the user to wait
+
+buttonState = digitalRead(buttonInput);                 //buttonState switches when input from buttonInput is detected
+if (buttonState == LOW && projectorOn == false) {       //if buttonInput is detected AND the projector is off...
+      buttonled = true;                                 //flip switch indicating that the ON LED should now be on
+      buttonled1 = false;                               //flip switch indicating that the OFF LED should now be off
+      digitalWrite(buttonLight, buttonled);             //write buttonled state to buttonLight
+      digitalWrite(buttonLight1, buttonled1);           //write buttonled1 state to buttonLight1
+      delay(1000);                                      //delay 1 second
+      Serial.println("C00");                            //sends string "C00" followed by carriage return to projector
+      delay(2000);                                      //delay 2 seconds
+      projectorState = true;                            //switch projectorState to true, this is needed for the blink program to start
+      projectorOn = true;                               //change projector state to ON
+
+      while (projectorState == true)  {                 //while projectorState is true, blink for 45 seconds while projector is turning on
+        buttonled = false;                              //switch buttonled to off
+        digitalWrite(buttonLight, buttonled);           //write buttonled state to buttonLight, turning off the ON LED
+        delay (500);                                    //delay a half second
+        buttonled = true;                               //switch buttonled to on
+        digitalWrite(buttonLight, buttonled);           //write buttonled state to buttonLight, turning on the ON LED
+        delay (500);                                    //delay a half second
+        onBlink++;                                      //add 1 to onBlink integer (starting at 0)
+        if (onBlink == 45)  {                           //if onBlink equals 45
+          buttonled = true;                             //switch buttonled to on
+          digitalWrite(buttonLight, buttonled);         //write buttonled state to buttonLight, turning on the ON LED
+          onBlink = 0;                                  //reset onBlink counter to 0
+          projectorState = false;                       //turn off projectorState to end blink program
+    }
+  }
+}
+
+//POWER OFF
+//When the OFF button is pressed, the light will come on momentarily before sending the OFF code to the projector. It takes around 2.5 minutes for the projector to
+//turn off, while it's in this "turning off" state the OFF button will run a blink loop for 2.5 minutes that disables all other inputs forcing the user to wait
+
+buttonState1 = digitalRead(buttonInput1);               //buttonState1 switches when input from buttonInput1 is detected
+if (buttonState1 == LOW && projectorOn == true) {       //if buttonInput1 is detected AND the projector is on...
+      buttonled = false;                                //flip switch indicating that the ON LED should be off
+      buttonled1 = true;                                //flip switch indicating that the OFF LED should be on
+      digitalWrite(buttonLight1, buttonled1);           //write buttonled1 state to buttonLight1
+      digitalWrite(buttonLight, buttonled);             //write buttonled state to buttonLight
+      delay(1000);                                      //delay 1 second
+      Serial.println("C01");                            //sends string "C01" followed by carriage return to projector
+      delay(2000);                                      //delay 2 seconds
+      Serial.println("C01");                            //sends string "C01" and CR again, by sending "off" twice the user doesn't need to hit the button again
+      projectorState = true;                            //flip switch setting the projectorState to TRUE, starting the blink program below
+      projectorOn = false;                              //flip switch changing projector state to OFF
+      
+      while (projectorState == true) {                  //while projectorState is true, blink for ~2 minutes while projector is shutting down
+      buttonled1 = false;                               //switch buttonled1 to off
+      digitalWrite(buttonLight1, buttonled1);           //write buttonled1 state (false) to buttonLight1, turning it off
+      delay (500);                                      //delay half a second
+      buttonled1 = true;                                //switch buttonled1 to on
+      digitalWrite(buttonLight1, buttonled1);           //write buttonled1 state (true) to buttonLight1, turning it on
+      delay (500);                                      //delay half a second
+      offBlink++;                                       //add 1 to offBlink integer
+      if (offBlink == 120) {                            //if offBlink equals 120
+        buttonled1 = true;                              //switch buttonled1 to on
+        digitalWrite(buttonLight1, buttonled1);         //write buttonled1 state (true) to buttonLight1, turning it on
+        offBlink = 0;                                   //reset offBlink integer to 0
+        projectorState = false;                         //end blink program
+    }
+  }
+}     
+
+//HDMI
+//Inputs cannot be changed while projector is off or running blink while loops, this will turn on the HDMI button and send the string to the projector to change
+//the input to HDMI
+
+buttonState2 = digitalRead(buttonInput2);               //buttonState2 switches when input from buttonState2 is detected
+if (buttonState2 == LOW && projectorOn == true) {       //if buttonInput2 is detected AND the projector is on...
+      buttonled2 = true;                                //turn on the HDMI led
+      buttonled3 = false;                               //turn off the VGA led
+      buttonled4 = false;                               //turn off the VGA2 led
+      digitalWrite(buttonLight2, buttonled2);           //write value defined above to HDMI led
+      digitalWrite(buttonLight3, buttonled3);           //write value defined above to VGA led
+      digitalWrite(buttonLight4, buttonled4);           //write value defined above to VGA2 led
+      delay(1000);                                      //delay 1 sec
+      Serial.println("C04");                            //send "C04" to projector followed by carriage return
+      delay(2000);                                      //delay 2 seconds
+      }
+
+//VGA1
+
+buttonState3 = digitalRead(buttonInput3);               //
+if (buttonState3 == LOW && projectorOn == true) {       //
+      buttonled2 = false;                               //
+      buttonled3 = true;                                //
+      buttonled4 = false;                               //
+      digitalWrite(buttonLight2, buttonled2);           //
+      digitalWrite(buttonLight3, buttonled3);           //
+      digitalWrite(buttonLight4, buttonled4);           //
+      delay(1000);                                      //
+      Serial.println("C05");                            //
+      delay(2000);                                      //
+      } 
+
+//VGA2
+
+buttonState4 = digitalRead(buttonInput4);               //
+if (buttonState4 == LOW && projectorOn == true) {       //
+      buttonled2 = false;                               //
+      buttonled3 = false;                               //
+      buttonled4 = true;                                //
+      digitalWrite(buttonLight2, buttonled2);           //
+      digitalWrite(buttonLight3, buttonled3);           //
+      digitalWrite(buttonLight4, buttonled4);           //
+      delay(1000);                                      //
+      Serial.println("C06");                            //
+      delay(2000);                                      //
+      }   
+
+//VIDEO MUTE ON
+buttonState5 = digitalRead(buttonInput5);
+if (buttonState5 == LOW && projectorOn == true && videomute == false) { //if button 6 is pressed, the projector is on, and videomute is OFF then...
+      buttonled5 = true;
+      digitalWrite(buttonLight5, buttonled5);
+      delay(1000);
+      Serial.println("C0D");
+      delay(2000);
+      videomute = true; //set videomute to TRUE
+}
+
+//VIDEO MUTE OFF
+buttonState5 = digitalRead(buttonInput5);
+if (buttonState5 == LOW && videomute == true && projectorOn == true ){  //if button 6 is pressed, the projector is on, and videomute is ON then...
+      buttonled5 = false;
+      digitalWrite(buttonLight5, buttonled5);
+      delay(1000);
+      Serial.println("C0E");
+      delay(2000);
+      videomute = false;  //reset videomute to FALSE
+    }
+}
